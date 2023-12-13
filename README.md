@@ -31,7 +31,7 @@ $  sed -i "" 's/,omitempty//g' *.pb.go
 ```
 model模版生产命令：
 ```shell
-$ goctl model mysql ddl -src="./*.sql" -dir="./" --style goZero
+$ goctl model mysql ddl -src="./*.sql" -dir="./" -style=goZero
 ```
 
 

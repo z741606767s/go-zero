@@ -1,3 +1,19 @@
 Name: user
 Host: 0.0.0.0
-Port: 8888
+Port: 1004
+Mode: dev
+
+#jwtAuth
+JwtAuth:
+  AccessSecret: ae0536f9-6450-4606-8e13-5a19ed505da0
+
+#log
+Log:
+  ServiceName: user-api
+  Level: error
+
+#rpc service
+UserRpcConf:
+  Endpoints:
+    - 127.0.0.1:2004
+  NonBlock: true
