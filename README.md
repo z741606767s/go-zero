@@ -1,6 +1,8 @@
 ### go-zero
-    简介
-    参考：https://github.com/Mikaelemmmm/go-zero-looklook
+简介
+
+[参考：https://github.com/Mikaelemmmm/go-zero-looklook](https://github.com/Mikaelemmmm/go-zero-looklook)
+
 ### tree
     项目根目录
     |-- README.md
@@ -24,8 +26,12 @@ api模版生成命令：
 ```
 rpc模版生成命令:
 ```shell
-$  goctl rpc protoc *.proto --go_out=../ --go-grpc_out=../  --zrpc_out=../
+$  goctl rpc protoc *.proto --go_out=../ --go-grpc_out=../  --zrpc_out=../ -style=goZero
 $  sed -i "" 's/,omitempty//g' *.pb.go
+```
+model模版生产命令：
+```shell
+$ goctl model mysql ddl -src="./*.sql" -dir="./" --style goZero
 ```
 
 
