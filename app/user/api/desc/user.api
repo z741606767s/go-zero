@@ -1,0 +1,80 @@
+syntax = "v1"
+
+info(
+    title: "user api"
+    author: "senyao"
+)
+
+type User {
+    Id int64 `json:"id"`
+    Mobile string `json:"mobile"`
+    Email string `json:"email"`
+    Nickname string `json:"nickname"`
+    Sex int `json:"sex"`
+    Avatar string `json:"avatar"`
+    Info string `json:"info"`
+}
+
+//注册
+type (
+    RegisterReq {
+        Mobile string `json:"mobile"`
+        Password string `json:"password"`
+    }
+    RegisterResp {
+        AccessToken string `json:"accessToken"`
+        AccessExpire int64 `json:"accessExpire"`
+        RefreshAfter int64 `json:"refreshAfter"`
+    }
+)
+
+//登陆
+type (
+    LoginReq {
+        Mobile string `json:"mobile"`
+        Password string `json:"password"`
+    }
+    LoginResp {
+        AccessToken string `json:"accessToken"`
+        AccessExpire int64 `json:"accessExpire"`
+        RefreshAfter int64 `json:"refreshAfter"`
+    }
+)
+
+//获取user信息
+type (
+    UserInfoReq {
+    }
+    UserInfoResp {
+        UserInfo User `json:"userInfo"`
+    }
+)
+
+//无需登陆
+@server(
+    prefix: user/v1
+    group: user
+)
+service user {
+    @doc "register"
+    @handler register
+    post /user/register (RegisterReq) returns (RegisterResp)
+
+    @doc "login"
+    @handler login
+    post /user/login (LoginReq) returns (LoginResp)
+}
+
+//需要登陆
+@server(
+    prefix: user/v1
+    group: user
+    jwt: JwtAuth
+)
+service user {
+    @doc "获取用户详情"
+    @handler detail
+    post /user/detail (UserInfoReq) returns (UserInfoResp)
+
+    // todo ...
+}

@@ -1,0 +1,252 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:latest
+    container_name: mysql
+    environment:
+      # 时区上海 - Time zone Shanghai (Change if needed)
+      TZ: Asia/Shanghai
+      MYSQL_ROOT_PASSWORD: root
+    ports:
+      - "3315:3306"
+    volumes:
+      # 数据挂载 - Data mounting
+      - ./data/mysql/data:/var/lib/mysql
+      # 日志
+    command:
+      # 将mysql8.0默认密码策略 修改为 原先 策略 (mysql8.0对其默认策略做了更改 会导致密码无法匹配)
+      # Modify the Mysql 8.0 default password strategy to the original strategy (MySQL8.0 to change its default strategy will cause the password to be unable to match)
+      --default-authentication-plugin=mysql_native_password
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_general_ci
+      --explicit_defaults_for_timestamp=true
+      --lower_case_table_names=1
+    privileged: true
+    restart: always
+    networks:
+      - my_network
+
+  redis:
+    image: redis:latest
+    container_name: redis
+    ports:
+      - "6388:6379"
+    environment:
+      # 时区上海 - Time zone Shanghai (Change if needed)
+      TZ: Asia/Shanghai
+    volumes:
+      # 数据文件 - data files
+      - ./data/redis/data:/data:rw
+    command: "redis-server --requirepass G62m50oigInC30sf  --appendonly yes"
+    privileged: true
+    restart: always
+    networks:
+      - my_network
+
+  postgres:
+    image: postgres:latest
+    container_name: postgres
+    build:
+      context: ./build
+      dockerfile: pg.dockerfile
+    security_opt:
+      - seccomp=unconfined
+    restart: always
+    environment:
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5446:5432"
+    networks:
+      - my_network
+
+  rabbitmq:
+    image: rabbitmq:3.9-management
+    container_name: rabbitmq
+    restart: always
+    environment:
+      RABBITMQ_DEFAULT_USER: root
+      RABBITMQ_DEFAULT_PASS: 123456
+    hostname: rabbitmq_host
+    ports:
+      - "5681:5672"
+      - "15681:15672"
+    networks:
+      - my_network
+
+  kafka:
+    image: bitnami/kafka:latest
+    container_name: kafka
+    environment:
+      KAFKA_ADVERTISED_HOST_NAME: kafka
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: false
+      TZ: Asia/Shanghai
+      KAFKA_ADVERTISED_LISTENERS: INSIDE://kafka:9093,OUTSIDE://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INSIDE:PLAINTEXT,OUTSIDE:PLAINTEXT
+      KAFKA_LISTENERS: INSIDE://0.0.0.0:9093,OUTSIDE://0.0.0.0:9092
+      KAFKA_INTER_BROKER_LISTENER_NAME: INSIDE
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+    restart: always
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - "9092:9092"
+    networks:
+      - my_network
+    depends_on:
+      - zookeeper
+
+  elasticsearch:
+    image: bitnami/elasticsearch:latest
+    container_name: elasticsearch
+    user: root
+    environment:
+      - discovery.type=single-node
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - TZ=Asia/Shanghai
+    volumes:
+      - ./data/elasticsearch/data:/usr/share/elasticsearch/data
+    restart: always
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    networks:
+      - my_network
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: jaeger
+    ports:
+      - "5775:5775/udp"
+      - "6831:6831/udp"
+      - "6832:6832/udp"
+      - "5778:5778"
+      - "16686:16686"
+      - "14268:14268"
+      - "9411:9411"
+    environment:
+      - SPAN_STORAGE_TYPE=elasticsearch
+      - ES_SERVER_URLS=http://elasticsearch:9200
+      - LOG_LEVEL=debug
+    networks:
+      - my_network
+    depends_on:
+      - elasticsearch
+
+#  prometheus:
+#    image: bitnami/prometheus:latest
+#    container_name: prometheus
+#    environment:
+#      # 时区上海 - Time zone Shanghai (Change if needed)
+#      TZ: Asia/Shanghai
+#    volumes:
+#      - /deploy/prometheus/server/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+#      - ./data/prometheus/data:/prometheus
+#    command:
+#      - '--config.file=/etc/prometheus/prometheus.yml'
+#      - '--storage.tsdb.path=/prometheus'
+#    restart: always
+#    user: root
+#    ports:
+#      - "9090:9090"
+#    networks:
+#      - my_network
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    hostname: grafana
+    user: root
+    environment:
+      - TZ=Asia/Shanghai
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    restart: always
+    volumes:
+      - ./data/grafana/data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    networks:
+      - my_network
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:7.15.2
+    container_name: kibana
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - TZ=Asia/Shanghai
+    ports:
+      - "5601:5601"
+    networks:
+      - my_network
+    depends_on:
+      - elasticsearch
+
+#  go-stash:
+#    image: kevinwan/go-stash:latest
+#    # Add your specific configurations here
+#    container_name: go-stash
+#    environment:
+#      # 时区上海 - Time zone Shanghai (Change if needed)
+#      TZ: Asia/Shanghai
+#    user: root
+#    restart: always
+#    volumes:
+#      - ./deploy/go-stash/etc:/app/etc
+#    networks:
+#      - my_network
+#    depends_on:
+#      - elasticsearch
+#      - kafka
+
+#  filebeat:
+#    image: docker.elastic.co/beats/filebeat:7.15.2
+#    container_name: filebeat
+#    environment:
+#      # 时区上海 - Time zone Shanghai (Change if needed)
+#      TZ: Asia/Shanghai
+#      user: root
+#      restart: always
+#    entrypoint: "filebeat -e -strict.perms=false"  #解决配置文件权限问题 - Solving the configuration file permissions
+#    volumes:
+#      - ./deploy/filebeat/conf/filebeat.yml:/usr/share/filebeat/filebeat.yml
+#        # 此处需指定docker的containers目录，取决于你docker的配置 - The containers directory of docker needs to be specified here, depending on your docker configuration
+#        # 如snap安装的docker，则为/var/snap/docker/common/var-lib-docker/containers - Example if docker is installed by Snap /var/snap/docker/common/var-lib-docker/containers
+#        # - /var/snap/docker/common/var-lib-docker/containers:/var/lib/docker/containers
+#      - /var/lib/docker/containers:/var/lib/docker/containers
+#    networks:
+#      - my_network
+#    depends_on:
+#      - elasticsearch
+#      - kafka
+
+  zookeeper:
+    image: wurstmeister/zookeeper:latest
+    container_name: zookeeper
+    environment:
+      # 时区上海 - Time zone Shanghai (Change if needed)
+      TZ: Asia/Shanghai
+    restart: always
+    ports:
+      - "2181:2181"
+    networks:
+      - my_network
+
+#  asynqmon:
+#    image: kevinwan/go-stash:latest
+#    container_name: asynqmon
+#    environment:
+#      - AYNQ_REDIS_URL=redis://redis:6379/0
+#    command:
+#      - '--redis-addr=redis:6379'
+#      - '--redis-password=G62m50oigInC30sf'
+#    restart: always
+#    ports:
+#      - "8080:8080"
+#    networks:
+#      - my_network
+#    depends_on:
+#      - redis
+
+networks:
+  my_network:
+    driver: bridge
