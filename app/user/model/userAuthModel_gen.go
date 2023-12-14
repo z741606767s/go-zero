@@ -6,6 +6,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/zeromicro/go-zero/core/stores/cache"
+	"go-zero/common/globalkey"
 	"strings"
 	"time"
 
@@ -20,11 +22,15 @@ var (
 	userAuthRows                = strings.Join(userAuthFieldNames, ",")
 	userAuthRowsExpectAutoSet   = strings.Join(stringx.Remove(userAuthFieldNames, "`id`", "`create_at`", "`create_time`", "`created_at`", "`update_at`", "`update_time`", "`updated_at`"), ",")
 	userAuthRowsWithPlaceHolder = strings.Join(stringx.Remove(userAuthFieldNames, "`id`", "`create_at`", "`create_time`", "`created_at`", "`update_at`", "`update_time`", "`updated_at`"), "=?,") + "=?"
+
+	cacheUserUserAuthIdPrefix              = "cache:user:userAuth:id:"
+	cacheUserUserAuthAuthTypeAuthKeyPrefix = "cache:user:userAuth:authType:authKey:"
+	cacheUserUserAuthUserIdAuthTypePrefix  = "cache:user:userAuth:userId:authType:"
 )
 
 type (
 	userAuthModel interface {
-		Insert(ctx context.Context, data *UserAuth) (sql.Result, error)
+		Insert(ctx context.Context, session sqlx.Session, data *UserAuth) (sql.Result, error)
 		FindOne(ctx context.Context, id int64) (*UserAuth, error)
 		FindOneByAuthTypeAuthKey(ctx context.Context, authType string, authKey string) (*UserAuth, error)
 		FindOneByUserIdAuthType(ctx context.Context, userId int64, authType string) (*UserAuth, error)
@@ -33,7 +39,8 @@ type (
 	}
 
 	defaultUserAuthModel struct {
-		conn  sqlx.SqlConn
+		conn sqlx.SqlConn
+		sqlc.CachedConn
 		table string
 	}
 
@@ -50,10 +57,11 @@ type (
 	}
 )
 
-func newUserAuthModel(conn sqlx.SqlConn) *defaultUserAuthModel {
+func newUserAuthModel(conn sqlx.SqlConn, c cache.CacheConf) *defaultUserAuthModel {
 	return &defaultUserAuthModel{
-		conn:  conn,
-		table: "`user_auth`",
+		conn:       conn,
+		CachedConn: sqlc.NewConn(conn, c),
+		table:      "`user_auth`",
 	}
 }
 
@@ -112,10 +120,19 @@ func (m *defaultUserAuthModel) FindOneByUserIdAuthType(ctx context.Context, user
 	}
 }
 
-func (m *defaultUserAuthModel) Insert(ctx context.Context, data *UserAuth) (sql.Result, error) {
-	query := fmt.Sprintf("insert into %s (%s) values (?, ?, ?, ?, ?, ?)", m.table, userAuthRowsExpectAutoSet)
-	ret, err := m.conn.ExecCtx(ctx, query, data.DeleteTime, data.DelState, data.Version, data.UserId, data.AuthKey, data.AuthType)
-	return ret, err
+func (m *defaultUserAuthModel) Insert(ctx context.Context, session sqlx.Session, data *UserAuth) (sql.Result, error) {
+	data.DeleteTime = time.Unix(0, 0)
+	data.DelState = globalkey.DelStateNo
+	userUserAuthAuthTypeAuthKeyKey := fmt.Sprintf("%s%v:%v", cacheUserUserAuthIdPrefix, data.AuthType, data.AuthKey)
+	userUserAuthIdKey := fmt.Sprintf("%s%v", cacheUserUserAuthIdPrefix, data.Id)
+	userUserAuthUserIdAuthTypeKey := fmt.Sprintf("%s%v:%v", cacheUserUserAuthUserIdAuthTypePrefix, data.UserId, data.AuthType)
+	return m.ExecCtx(ctx, func(ctx context.Context, conn sqlx.SqlConn) (result sql.Result, err error) {
+		query := fmt.Sprintf("insert into %s (%s) values (?, ?, ?, ?, ?, ?)", m.table, userAuthRowsExpectAutoSet)
+		if session != nil {
+			return session.ExecCtx(ctx, query, data.DeleteTime, data.DelState, data.Version, data.UserId, data.AuthKey, data.AuthType)
+		}
+		return conn.ExecCtx(ctx, query, data.DeleteTime, data.DelState, data.Version, data.UserId, data.AuthKey, data.AuthType)
+	}, userUserAuthAuthTypeAuthKeyKey, userUserAuthIdKey, userUserAuthUserIdAuthTypeKey)
 }
 
 func (m *defaultUserAuthModel) Update(ctx context.Context, newData *UserAuth) error {
