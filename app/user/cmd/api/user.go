@@ -3,7 +3,6 @@ package main
 import (
 	"flag"
 	"fmt"
-
 	"go-zero/app/user/cmd/api/internal/config"
 	"go-zero/app/user/cmd/api/internal/handler"
 	"go-zero/app/user/cmd/api/internal/svc"
@@ -12,7 +11,7 @@ import (
 	"github.com/zeromicro/go-zero/rest"
 )
 
-var configFile = flag.String("f", "etc/user.yaml", "the config file")
+var configFile = flag.String("f", "/Users/senyao/GolandProjects/src/go-zero/app/user/cmd/api/etc/user.yaml", "the config file")
 
 func main() {
 	flag.Parse()

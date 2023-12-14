@@ -6,6 +6,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/zeromicro/go-zero/core/stores/cache"
+	"go-zero/common/globalkey"
 	"strings"
 	"time"
 
@@ -20,19 +22,24 @@ var (
 	userRows                = strings.Join(userFieldNames, ",")
 	userRowsExpectAutoSet   = strings.Join(stringx.Remove(userFieldNames, "`id`", "`create_at`", "`create_time`", "`created_at`", "`update_at`", "`update_time`", "`updated_at`"), ",")
 	userRowsWithPlaceHolder = strings.Join(stringx.Remove(userFieldNames, "`id`", "`create_at`", "`create_time`", "`created_at`", "`update_at`", "`update_time`", "`updated_at`"), "=?,") + "=?"
+
+	cacheUsercenterUserIdPrefix     = "cache:User:user:id:"
+	cacheUsercenterUserMobilePrefix = "cache:User:user:mobile:"
 )
 
 type (
 	userModel interface {
-		Insert(ctx context.Context, data *User) (sql.Result, error)
+		Insert(ctx context.Context, session sqlx.Session, data *User) (sql.Result, error)
 		FindOne(ctx context.Context, id int64) (*User, error)
 		FindOneByMobile(ctx context.Context, mobile string) (*User, error)
 		Update(ctx context.Context, data *User) error
 		Delete(ctx context.Context, id int64) error
+		Trans(ctx context.Context, fn func(context context.Context, session sqlx.Session) error) error
 	}
 
 	defaultUserModel struct {
-		conn  sqlx.SqlConn
+		conn sqlx.SqlConn
+		sqlc.CachedConn
 		table string
 	}
 
@@ -52,10 +59,11 @@ type (
 	}
 )
 
-func newUserModel(conn sqlx.SqlConn) *defaultUserModel {
+func newUserModel(conn sqlx.SqlConn, c cache.CacheConf) *defaultUserModel {
 	return &defaultUserModel{
-		conn:  conn,
-		table: "`user`",
+		conn:       conn,
+		CachedConn: sqlc.NewConn(conn, c),
+		table:      "`user`",
 	}
 }
 
@@ -87,6 +95,9 @@ func (m *defaultUserModel) FindOne(ctx context.Context, id int64) (*User, error)
 }
 
 func (m *defaultUserModel) FindOneByMobile(ctx context.Context, mobile string) (*User, error) {
+	ctx, cancel := context.WithTimeout(ctx, time.Second*5) // 适当调整超时时间
+	defer cancel()
+
 	var resp User
 	query := fmt.Sprintf("select %s from %s where `mobile` = ? limit 1", userRows, m.table)
 	err := m.conn.QueryRowCtx(ctx, &resp, query, mobile)
@@ -100,10 +111,19 @@ func (m *defaultUserModel) FindOneByMobile(ctx context.Context, mobile string) (
 	}
 }
 
-func (m *defaultUserModel) Insert(ctx context.Context, data *User) (sql.Result, error) {
-	query := fmt.Sprintf("insert into %s (%s) values (?, ?, ?, ?, ?, ?, ?, ?, ?)", m.table, userRowsExpectAutoSet)
-	ret, err := m.conn.ExecCtx(ctx, query, data.DeleteTime, data.DelState, data.Version, data.Mobile, data.Password, data.Nickname, data.Sex, data.Avatar, data.Info)
-	return ret, err
+func (m *defaultUserModel) Insert(ctx context.Context, session sqlx.Session, data *User) (sql.Result, error) {
+	data.DeleteTime = time.Unix(0, 0)
+	data.DelState = globalkey.DelStateNo
+	userUserIdKey := fmt.Sprintf("%s%v", cacheUsercenterUserIdPrefix, data.Id)
+	userUserMobileKey := fmt.Sprintf("%s%v", cacheUsercenterUserMobilePrefix, data.Mobile)
+	return m.ExecCtx(ctx, func(ctx context.Context, conn sqlx.SqlConn) (sql.Result, error) {
+		query := fmt.Sprintf("insert into %s (%s) values (?, ?, ?, ?, ?, ?, ?, ?, ?)", m.table, userRowsExpectAutoSet)
+		if session != nil {
+			return session.ExecCtx(ctx, query, data.DeleteTime, data.DelState, data.Version, data.Mobile, data.Password, data.Nickname, data.Sex, data.Avatar, data.Info)
+		}
+		return m.conn.ExecCtx(ctx, query, data.DeleteTime, data.DelState, data.Version, data.Mobile, data.Password, data.Nickname, data.Sex, data.Avatar, data.Info)
+	}, userUserIdKey, userUserMobileKey)
+
 }
 
 func (m *defaultUserModel) Update(ctx context.Context, newData *User) error {
@@ -114,4 +134,10 @@ func (m *defaultUserModel) Update(ctx context.Context, newData *User) error {
 
 func (m *defaultUserModel) tableName() string {
 	return m.table
+}
+
+func (m *defaultUserModel) Trans(ctx context.Context, fn func(ctx context.Context, session sqlx.Session) error) error {
+	return m.TransactCtx(ctx, func(ctx context.Context, session sqlx.Session) error {
+		return fn(ctx, session)
+	})
 }

@@ -37,5 +37,23 @@ services:
     networks:
       - zero_network
 
+  #前端api + 业务rpc - Front-end API + business RPC
+  gomodd:
+    # docker-hub : https://hub.docker.com/r/lyumikael/gomodd
+    # dockerfile: https://github.com/Mikaelemmmm/gomodd , If you are macOs m1\m2 use dockerfile yourself to build the image
+    image: lyumikael/go-modd-env:v1.0.0
+    container_name: gomodd
+    environment:
+      # 时区上海 - Timezone Shanghai
+      TZ: Asia/Shanghai
+      GOPROXY: https://goproxy.cn,direct
+    working_dir: /data/gomodd
+    volumes:
+      - .:/data/gomodd
+    privileged: true
+    restart: always
+    networks:
+      - zero_network
+
 networks:
   zero_network:

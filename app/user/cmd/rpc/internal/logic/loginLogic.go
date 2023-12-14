@@ -2,6 +2,7 @@ package logic
 
 import (
 	"context"
+	"go-zero/common/xerr"
 
 	"go-zero/app/user/cmd/rpc/internal/svc"
 	"go-zero/app/user/cmd/rpc/pd"
@@ -14,6 +15,9 @@ type LoginLogic struct {
 	svcCtx *svc.ServiceContext
 	logx.Logger
 }
+
+var ErrGenerateTokenError = xerr.NewErrMsg("生成token失败")
+var ErrUsernamePwdError = xerr.NewErrMsg("账号或密码不正确")
 
 func NewLoginLogic(ctx context.Context, svcCtx *svc.ServiceContext) *LoginLogic {
 	return &LoginLogic{
